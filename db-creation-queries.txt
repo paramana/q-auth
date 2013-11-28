@@ -1,0 +1,17 @@
+CREATE TABLE `_authentication` (
+  `session_id` varchar(255) NOT NULL,
+  `session_id_` varchar(255) NOT NULL,
+  `ip` int(11) NOT NULL,
+  `user_id` smallint(5) unsigned NOT NULL,
+  `user_role` tinyint(4) NOT NULL,
+  `expire` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `session_id` (`session_id`,`session_id_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE `_block_list` (
+  `ip` int(11) NOT NULL,
+  `attempts` tinyint(3) unsigned NOT NULL,
+  `block_action` varchar(255) NOT NULL,
+  `when_blocked` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `ip` (`ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
