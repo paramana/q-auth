@@ -3,7 +3,7 @@
 /* !
  * Version: 1.0
  * Started: 20-11-2012
- * Updated: 28-11-2013
+ * Updated: 18-12-2013
  * Author: giannis [at] paramana dot com
  *
  * The class that handles the session data
@@ -189,8 +189,7 @@ abstract class Q_Session {
             $this->session_id = $_SESSION[$this->cookie_prefix . "sid"];
             $this->session_id_ = $_SESSION[$this->cookie_prefix . "sid_"];
             return array($this->session_id, $this->session_id_);
-        } 
-        else if (!empty($_COOKIE[$this->cookie_prefix . "sid"]) && !empty($_COOKIE[$this->cookie_prefix . "sid_"])) {
+        } else if (!empty($_COOKIE[$this->cookie_prefix . "sid"]) && !empty($_COOKIE[$this->cookie_prefix . "sid_"])) {
             $this->session_id = $_COOKIE[$this->cookie_prefix . "sid"];
             $this->session_id_ = $_COOKIE[$this->cookie_prefix . "sid_"];
             return array($this->session_id, $this->session_id_);
@@ -272,8 +271,7 @@ abstract class Q_Session {
         if (!$destroy) {
             $_SESSION[$this->cookie_prefix . "sid"] = $this->session_id;
             $_SESSION[$this->cookie_prefix . "sid_"] = $this->session_id_;
-        } 
-        else {
+        } else {
             if (isset($_SESSION[$this->cookie_prefix . "sid"])) {
                 session_destroy();
                 session_unset();
@@ -292,7 +290,7 @@ abstract class Q_Session {
      * @return string Authentication cookie contents
      */
     private static function _make_session_id($user, $expiration, $scheme = "auth") {
-        $key = q_hash($user . "|" . $expiration, $scheme);
+        $key = q_hash($user . "|" . $expiration . '|' . time(), $scheme);
         $hash = hash_hmac("sha256", $user . "|" . $expiration, $key);
 
         return $hash . ":" . time();
