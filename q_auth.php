@@ -1,9 +1,8 @@
 <?php
-
 /* !
- * Version: 1.4
+ * Version: 1.5
  * Started: 29-04-2010
- * Updated: 18-12-2013
+ * Updated: 12-02-2014
  * Author: giannis [at] paramana dot com
  *
  * Interface for authorization.
@@ -14,11 +13,8 @@
  * include files
  * 
  */
-
 require_once(__DIR__ . "/../../common/init.php");
 require_once(ENGINE_PATH . "/init_app.php");
-
-//require_once (ENGINE_PATH . "/autoload.php");
 
 class Q_Auth extends Q_Session {
 
@@ -100,6 +96,14 @@ class Q_Auth extends Q_Session {
             $this->single_session = SINGLE_SESSION;
     }
     
+    public function get_block_attempts_limit(){
+        return $this->block_level;
+    }
+
+    public function get_block_timer(){
+        return $this->block_lifetime;
+    }
+
     /**
      * Returns how many active sessions exist with the current account
      * 
@@ -140,7 +144,7 @@ class Q_Auth extends Q_Session {
         return $this->_get_session() ? true : false;
     }
 
-    static public function login() {
+    static public function authorization($type="login"){
         $that = static::$instance;
 
         $username = !empty($_POST["username"]) ? sanitize_user($_POST["username"]) : NULL;
@@ -151,10 +155,10 @@ class Q_Auth extends Q_Session {
         if ($ishuman != "yep" || !$requested)
             return response_message("UNAUTHORIZED", "refresh");
         if (!$username)
-            return response_message("UNAUTHORIZED", "user");
+            return response_message("UNAUTHORIZED", "error_username");
         if (!$password)
-            return response_message("UNAUTHORIZED", "pass");
-
+            return response_message("UNAUTHORIZED", "error_password");
+        
         list($when, $hash) = explode("#", strip_all_tags($requested), 2);
         if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
             // error condition, redisplay form; either
@@ -166,36 +170,105 @@ class Q_Auth extends Q_Session {
         $blockLevel = $that->is_blocked();
 
         if ($blockLevel == "BLOCK")
-            return response_message("UNAUTHORIZED", "block");
+            return response_message("UNAUTHORIZED", "error_block");
 
         if ($blockLevel == "CAPTCHA") {
             if (empty($_POST["captcha"]))
-                return response_message("UNAUTHORIZED", "captcha");
+                return response_message("UNAUTHORIZED", "error_captcha");
 
             require_once(APP_ROOT . "/common/classes/securimage/securimage.php");
             $SecureImg = new Securimage();
 
-            if ($SecureImg->getCode() != strtolower(sanitize_user($_POST["captcha"])))
+            if ($SecureImg->getCode() != strtolower(sanitize_user($_POST["captcha"]))) {
+                $that->_set_block();
                 return response_message("UNAUTHORIZED", "wrong_captcha");
+            }
         }
 
+        if ($type == "signup")
+            return $that->signup($username, $password);
+
+        return $that->login($username, $password);
+    }
+
+    private function signup($username, $password){
+        if (!filter_var($username, FILTER_VALIDATE_EMAIL))
+            return response_message("ACTIVATION_FAILED", "error_username");
+
+        $first_name   = !empty($_POST["first_name"]) ? strip_all_tags($_POST["first_name"]) : NULL;
+        $last_name    = !empty($_POST["last_name"]) ? strip_all_tags($_POST["last_name"]) : NULL;
+        $redirect_url = "";
+
+        if (!$first_name)
+            return response_message("ACTIVATION_FAILED", "error_first_name");
+        if (!$last_name)
+            return response_message("ACTIVATION_FAILED", "error_last_name");
+
+        $user_data = $this->_get_user("username", $username);
+
+        if (!empty($_SERVER['HTTP_REFERER'])) {
+            $redirect_url = $_SERVER['HTTP_REFERER'];
+        }
+        
+        if ($user_data)
+            return response_message("ACTIVATION_FAILED", "error_user_exists");
+
+        $activation_hash = q_hash($username . time(), "logged_in");
+
+        global $idb; //the db class
+        
+        $idb->insert(DB_PREFIX . "users",
+                        array(
+                            "user_name"=>$username,
+                            "user_pass"=>$password,
+                            "user_role"=>1,
+                            "user_expire_date"=>"",
+                            "user_status"=>"activation",
+                            "user_activation_key"=>$activation_hash . (empty($redirect_url) ? "" : "|%:%|$redirect_url")
+                        ), 
+                        array(
+                            "%s", "%s", "%d", "%s", "%s", "%s"
+                        ));
+        
+        $idb->insert(DB_PREFIX . "user_meta",
+                    array(
+                        "user_id"=>$idb->insert_id,
+                        "first_name"=>$first_name,
+                        "last_name"=>$last_name,
+                        "email"=>$username
+                    ), 
+                    array(
+                        "%d", "%s", "%s", "%s"
+                    ));
+
+        if ($idb->last_error)
+            return array($idb->last_error);
+        
+        if (!empty($errors))
+            return $errors;
+
+        //login the user
+        $this->authentication($username, $password);
+
+        $Activation = Q_Activation::i();
+
+        return $Activation->send_activation($username, $activation_hash);
+    }
+
+    private function login($username, $password) {
         if (!empty($_POST["remember"]))
             $this->expire_time = time() + $this->remember_time;
 
-        if (!$that->authentication($username, $password)) {
-            $blockLevel = $that->is_blocked();
+        if (!$this->authentication($username, $password)) {
+            $blockLevel = $this->is_blocked();
 
-            if (!$blockLevel)
-                return response_message("UNAUTHORIZED", "error");
-            else if ($blockLevel == "CAPTCHA")
-                return response_message("UNAUTHORIZED", "captcha");
-            else if ($blockLevel == "BLOCK")
-                return response_message("UNAUTHORIZED", "block");
+            if ($blockLevel == "BLOCK")
+                return response_message("UNAUTHORIZED", "error_block");
             else
-                return response_message("UNAUTHORIZED", "error");
+                return response_message("UNAUTHORIZED", "error_username");
         }
 
-        return response_message("SUCCESS", "yay");
+        return response_message("SUCCESS", user_login_path($this->get_role()) . "/");
     }
 
     /**
@@ -255,14 +328,19 @@ class Q_Auth extends Q_Session {
      * 
      */
     static public function logout() {
-        $that = static::$instance;
+        $that    = static::$instance;
+        $request = !empty($_REQUEST) ? $_REQUEST : array();
+        
         global $idb;
-
+        
         $idb->delete(DB_PREFIX . "authentication", array("session_id" => $that->_get_session(true)), array("%s"));
 
         $that->_destoy_session();
 
-        header("Location: " . BASE_PATH . "signin/");
+        if (isset($request["redirect"]))
+            header("Location: " . $request["redirect"]);
+        else
+            header("Location: " . BASE_PATH . "signin/");
     }
 
     /**
@@ -384,7 +462,7 @@ class Q_Auth extends Q_Session {
         global $idb;
 
         $block_action = NULL;
-        $attempts = NULL;
+        $attempts     = NULL;
         $when_blocked = NULL;
 
         $query = $idb->prepare("SELECT block_action, attempts, when_blocked
@@ -395,7 +473,8 @@ class Q_Auth extends Q_Session {
             $block_action = $block_state->block_action;
             $when_blocked = $block_state->when_blocked;
             $attempts = $block_state->attempts + 1;
-        } else {
+        } 
+        else {
             $attempts = 1;
         }
 
