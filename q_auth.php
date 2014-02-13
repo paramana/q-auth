@@ -268,7 +268,7 @@ class Q_Auth extends Q_Session {
                 return response_message("UNAUTHORIZED", "error_username");
         }
 
-        return response_message("SUCCESS", user_login_path($this->get_role()) . "/");
+        return response_message("SUCCESS", user_login_path($this->get_role()));
     }
 
     /**
@@ -295,6 +295,9 @@ class Q_Auth extends Q_Session {
             $this->_set_block();
             return false;
         }
+
+        if (!empty($user_data->user_expire_date) && $user_data->user_expire_date != "0000-00-00 00:00:00" && strtotime($user_data->user_expire_date) < time())
+            return response_message("UNAUTHORIZED", "error_user_expired");
 
         $session_ids = $this->_create_new_session($user_data);
 
