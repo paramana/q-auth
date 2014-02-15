@@ -2,7 +2,7 @@
 /* !
  * Version: 1.5
  * Started: 29-04-2010
- * Updated: 12-02-2014
+ * Updated: 15-02-2014
  * Author: giannis [at] paramana dot com
  *
  * Interface for authorization.
@@ -41,13 +41,13 @@ class Q_Auth extends Q_Session {
      * the level of blocking
      * @var int
      */
-    private $block_level = 6;
+    private $block_attempts = 6;
 
     /**
      * the level of captcha
      * @var int
      */
-    private $captcha_level = 3;
+    private $captcha_attempts = 3;
 
     /**
      * Block lifetime this is 60 * 10 means 10 min
@@ -71,9 +71,35 @@ class Q_Auth extends Q_Session {
     private $expire_time = 0;
 
     /**
-     * 
+     * If set to true only one login at a time is allowed
+     *
+     * @var boolean
      */
     private $single_session = false;
+
+    /**
+     * If set to true we display a captcha after the user exceeds
+     * captcha failed attempts
+     *
+     * @var boolean
+     */
+    private $has_captcha = true;
+
+    /**
+     * If set to true the unremember sessions 
+     * will expire after the default session time has exceed
+     * 
+     * @var boolean
+     */
+    private $expire_sessions = true;
+
+    /**
+     * The time that a session without remember will expires
+     * this is 60 * 60 * 2 means 2 hours
+     * 
+     * @var int
+     */
+    private $default_expire_time = 7200;
 
     /**
      * Behaves as a contructor
@@ -94,10 +120,31 @@ class Q_Auth extends Q_Session {
 
         if (defined("SINGLE_SESSION"))
             $this->single_session = SINGLE_SESSION;
+
+        if (defined("EXPIRE_SESSIONS"))
+            $this->expire_sessions = EXPIRE_SESSIONS;
+
+        if (defined("SESSION_EXPIRE_TIME"))
+            $this->default_expire_time = SESSION_EXPIRE_TIME;
+
+        if (defined("REMEMBER_TIME"))
+            $this->remember_time = REMEMBER_TIME;
+
+        if (defined("HAS_CAPTCHA"))
+            $this->has_captcha = HAS_CAPTCHA;  
+
+        if (defined("CAPTCHA_ATTEMPTS"))
+            $this->captcha_attempts = CAPTCHA_ATTEMPTS;  
+
+        if (defined("BLOCK_ATTEMPTS"))
+            $this->block_attempts = BLOCK_ATTEMPTS;    
+
+        if (defined("BLOCK_LIFETIME"))
+            $this->block_lifetime = BLOCK_LIFETIME;            
     }
     
     public function get_block_attempts_limit(){
-        return $this->block_level;
+        return $this->block_attempts;
     }
 
     public function get_block_timer(){
@@ -258,6 +305,8 @@ class Q_Auth extends Q_Session {
     private function login($username, $password) {
         if (!empty($_POST["remember"]))
             $this->expire_time = time() + $this->remember_time;
+        else
+            $this->expire_time = time() + $this->default_expire_time;
 
         if (!$this->authentication($username, $password)) {
             $blockLevel = $this->is_blocked();
@@ -319,7 +368,7 @@ class Q_Auth extends Q_Session {
             "session_id_" => $session_ids[1],
             "ip" => $this->client_ip,
             "user_role" => $this->get_role(),
-            "expire" => gmdate("Y-m-d H:i:s", $this->expire_time),
+            "expire" => date("Y-m-d H:i:s", $this->expire_time),
             "user_id" => $this->get_user_id())
         );
 
@@ -481,9 +530,9 @@ class Q_Auth extends Q_Session {
             $attempts = 1;
         }
 
-        if ($attempts > $this->block_level)
+        if ($attempts > $this->block_attempts)
             $block_action = "BLOCK";
-        else if ($attempts > $this->captcha_level)
+        else if ($this->has_captcha && $attempts > $this->captcha_attempts)
             $block_action = "CAPTCHA";
         else
             $block_action = "";
@@ -508,16 +557,12 @@ class Q_Auth extends Q_Session {
     private function _clean_db_sessions() {
         global $idb;
         
-        if (!$this->single_session)
-            return;
-        
+        if ($this->single_session) {
+            $this->_keep_single_sessions();
+        }
         $user_id = $this->get_user_id();
-
-//        if ($this->single_session)
-//            $query = $idb->prepare("DELETE FROM " . DB_PREFIX . "authentication 
-//                                    WHERE (ip = %d OR user_id = %d) AND expire <= CURDATE()", $this->client_ip, $user_id);
-//        else
-        $query = $idb->prepare("DELETE FROM " . DB_PREFIX . "authentication WHERE user_id = %d", $user_id);
+        $query = $idb->prepare("DELETE FROM " . DB_PREFIX . "authentication 
+                                   WHERE (ip = %d OR user_id = %d) AND expire <= NOW()", $this->client_ip, $user_id);
 
         $idb->query($query);
     }

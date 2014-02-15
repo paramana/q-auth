@@ -3,7 +3,7 @@
 /* !
  * Version: 1.0
  * Started: 20-11-2012
- * Updated: 18-12-2013
+ * Updated: 15-02-2014
  * Author: giannis [at] paramana dot com
  *
  * The class that handles the session data
@@ -240,6 +240,14 @@ abstract class Q_Session {
     protected function _update_session($data) {
         $this->_set_session_data($data);
         return $this->_get_session();
+    }
+
+    protected function _keep_single_sessions(){
+        global $idb;
+
+        $user_id = $this->get_user_id();
+
+        $idb->delete(DB_PREFIX . "authentication", array("user_id"=>$user_id), array("%d"));
     }
 
     /**
