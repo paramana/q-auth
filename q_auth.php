@@ -148,9 +148,9 @@ class Q_Auth extends Q_Session {
         $that = static::$instance;
 
         $username = !empty($_POST["username"]) ? sanitize_user($_POST["username"]) : NULL;
-        $password = !empty($_POST["password"]) ? strip_all_tags($_POST["password"]) : NULL;
-        $ishuman = !empty($_POST["ishuman"]) ? strip_all_tags($_POST["ishuman"]) : NULL;
-        $requested = !empty($_POST["requested"]) ? strip_all_tags($_POST["requested"]) : NULL;
+        $password = !empty($_POST["password"]) ? sanitze_request($_POST["password"]) : NULL;
+        $ishuman = !empty($_POST["ishuman"]) ? sanitze_request($_POST["ishuman"]) : NULL;
+        $requested = !empty($_POST["requested"]) ? sanitze_request($_POST["requested"]) : NULL;
 
         if ($ishuman != "yep" || !$requested)
             return response_message("UNAUTHORIZED", "refresh");
@@ -332,7 +332,7 @@ class Q_Auth extends Q_Session {
      */
     static public function logout() {
         $that    = static::$instance;
-        $request = !empty($_REQUEST) ? $_REQUEST : array();
+        $request = !empty($_REQUEST) ? sanitze_request($_REQUEST) : array();
         
         global $idb;
         
