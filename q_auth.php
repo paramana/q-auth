@@ -2,7 +2,7 @@
 /* !
  * Version: 1.5
  * Started: 29-04-2010
- * Updated: 15-02-2014
+ * Updated: 18-02-2014
  * Author: giannis [at] paramana dot com
  *
  * Interface for authorization.
@@ -206,7 +206,7 @@ class Q_Auth extends Q_Session {
         if (!$password)
             return response_message("UNAUTHORIZED", "error_password");
         
-        list($when, $hash) = explode("#", strip_all_tags($requested), 2);
+        list($when, $hash) = explode("#", $requested, 2);
         if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
             // error condition, redisplay form; either
             // corrupted or the form was served > 30 minutes
@@ -580,7 +580,7 @@ class Q_Auth extends Q_Session {
      *
      * @since 2.5
      * @global object $q_hasher PHPass object used for checking the password
-     * 	against the $hash + $password
+     *  against the $hash + $password
      * @uses PasswordHash::CheckPassword
      *
      * @param string $password Plaintext user"s password already md5 from the client
@@ -664,5 +664,4 @@ class Q_Auth extends Q_Session {
         return $user;
     }
 }
-
 ?>
