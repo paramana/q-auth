@@ -560,9 +560,10 @@ class Q_Auth extends Q_Session {
         if ($this->single_session) {
             $this->_keep_single_sessions();
         }
+
         $user_id = $this->get_user_id();
         $query = $idb->prepare("DELETE FROM " . DB_PREFIX . "authentication 
-                                   WHERE (ip = %d OR user_id = %d) AND expire <= NOW()", $this->client_ip, $user_id);
+                                   WHERE (user_id = %d) AND expire <= NOW()", $user_id);
 
         $idb->query($query);
     }
@@ -580,7 +581,7 @@ class Q_Auth extends Q_Session {
      *
      * @since 2.5
      * @global object $q_hasher PHPass object used for checking the password
-     *  against the $hash + $password
+     * 	against the $hash + $password
      * @uses PasswordHash::CheckPassword
      *
      * @param string $password Plaintext user"s password already md5 from the client
