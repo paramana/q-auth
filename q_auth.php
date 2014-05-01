@@ -191,19 +191,21 @@ class Q_Auth extends Q_Session {
         return $this->_get_session() ? true : false;
     }
 
-    static public function authorization($type="login"){
+    static public function authorization($req_type="login"){
         $that = static::$instance;
 
-        $username = !empty($_POST["username"]) ? sanitize_user($_POST["username"]) : NULL;
-        $password = !empty($_POST["password"]) ? sanitze_request($_POST["password"]) : NULL;
-        $ishuman = !empty($_POST["ishuman"]) ? sanitze_request($_POST["ishuman"]) : NULL;
+        $req_type  = sanitze_request($req_type);
+        $username  = !empty($_POST["username"]) ? sanitize_user($_POST["username"]) : NULL;
+        $password  = !empty($_POST["password"]) ? sanitze_request($_POST["password"]) : NULL;
+        $hash_code = !empty($_POST["hash_code"]) ? sanitze_request($_POST["hash_code"]) : NULL;
+        $ishuman   = !empty($_POST["ishuman"]) ? sanitze_request($_POST["ishuman"]) : NULL;
         $requested = !empty($_POST["requested"]) ? sanitze_request($_POST["requested"]) : NULL;
 
         if ($ishuman != "yep" || !$requested)
             return response_message("UNAUTHORIZED", "refresh");
         if (!$username)
             return response_message("UNAUTHORIZED", "error_username");
-        if (!$password)
+        if (!$password && $req_type != 'recover-pass')
             return response_message("UNAUTHORIZED", "error_password");
         
         list($when, $hash) = explode("#", $requested, 2);
@@ -232,10 +234,93 @@ class Q_Auth extends Q_Session {
             }
         }
 
-        if ($type == "signup")
+        if ($req_type == "signup")
             return $that->signup($username, $password);
 
+        if ($req_type == "recover-pass")
+            return $that->recover_password($username);
+
+        if ($req_type == "reset-pass")
+            return $that->reset_password($username, $password, $hash_code);
+
         return $that->login($username, $password);
+    }
+
+    private function reset_password($username, $password, $reset_hash){
+        if (!$reset_hash)
+            return response_message("INVALID_REQUEST", "error_activate");
+
+        global $idb;
+
+        $query = $idb->prepare("SELECT user_id, user_status, user_activation_key
+                                FROM " . DB_PREFIX . "users
+                                WHERE user_name = %s", $username, $reset_hash);
+
+        $db_result = $idb->get_row($query);
+
+        if (!$db_result)
+            return response_message("NO_USENAME", "error_no_user");
+
+        if ($db_result->user_status != 'reset-pass')
+            return response_message("INVALID_REQUEST", "error_general");
+
+        if ($db_result->user_activation_key != $reset_hash)
+            return response_message("INVALID_REQUEST", "error_general");
+
+        $idb->update(DB_PREFIX . "users", 
+                                    array(
+                                        "user_pass"=>$password,
+                                        "user_status"=>"active", 
+                                        "user_activation_key"=>""
+                                    ), 
+                                    array("user_id"=>$db_result->user_id),
+                                    array("%s", "%s", "%s"),
+                                    array("%d")
+                                );
+
+        $this->authentication($username, $password);
+
+        return response_message("SUCCESS", user_login_path($this->get_role()));
+    }
+
+    private function recover_password($username){
+        global $idb;
+
+        $query = $idb->prepare("SELECT u.user_id, u.user_role, u.user_status, u.user_activation_key,
+                                       um.first_name, um.last_name, um.email, um.phone
+                                FROM " . DB_PREFIX . "users u
+                                INNER JOIN " . DB_PREFIX . "user_meta um ON (u.user_id = um.user_id)
+                                WHERE user_name = %s", $username);
+
+        $db_result = $idb->get_row($query);
+
+        if (!$db_result)
+            return response_message("NO_USENAME", "error_username");
+
+        if ($db_result->user_status == 'activation')
+            return response_message("ACTIVATION_NEEDED", "error_activation_needed");
+
+        $reset_password_hash = q_hash($username . time(), "logged_in");
+        $idb->update(DB_PREFIX . "users", 
+                                    array(
+                                        "user_status"=>"reset-pass", 
+                                        "user_activation_key"=>$reset_password_hash
+                                    ), 
+                                    array("user_id"=>$db_result->user_id),
+                                    array("%s", "%s"),
+                                    array("%d")
+                                );
+
+        $Email_App = Email::i();
+
+        return $Email_App->send(
+                        "password-recovery", 
+                        array(
+                            "reset_password_hash"=>$reset_password_hash,
+                            "email_to"=>$username,
+                            "first_name"=>$db_result->first_name,
+                            "last_name"=>$db_result->last_name
+                        ));
     }
 
     private function signup($username, $password){
@@ -252,10 +337,6 @@ class Q_Auth extends Q_Session {
             return response_message("ACTIVATION_FAILED", "error_last_name");
 
         $user_data = $this->_get_user("username", $username);
-
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-            $redirect_url = $_SERVER['HTTP_REFERER'];
-        }
         
         if ($user_data)
             return response_message("ACTIVATION_FAILED", "error_user_exists");
@@ -271,15 +352,17 @@ class Q_Auth extends Q_Session {
                             "user_role"=>1,
                             "user_expire_date"=>"",
                             "user_status"=>"activation",
-                            "user_activation_key"=>$activation_hash . (empty($redirect_url) ? "" : "|%:%|$redirect_url")
+                            "user_activation_key"=>$activation_hash
                         ), 
                         array(
                             "%s", "%s", "%d", "%s", "%s", "%s"
                         ));
         
+        $user_id = $idb->insert_id;
+
         $idb->insert(DB_PREFIX . "user_meta",
                     array(
-                        "user_id"=>$idb->insert_id,
+                        "user_id"=>$user_id,
                         "first_name"=>$first_name,
                         "last_name"=>$last_name,
                         "email"=>$username
@@ -287,6 +370,15 @@ class Q_Auth extends Q_Session {
                     array(
                         "%d", "%s", "%s", "%s"
                     ));
+
+        $idb->insert(DB_PREFIX . "user_options", 
+                    array(
+                        "user_id"=>$user_id,
+                        "option_key"=>"talent_visibility",
+                        "option_value"=>1
+                    ), 
+                    array("%d", "%s", "%d")
+                );
 
         if ($idb->last_error)
             return array($idb->last_error);
@@ -299,7 +391,7 @@ class Q_Auth extends Q_Session {
 
         $Activation = Q_Activation::i();
 
-        return $Activation->send_activation($username, $activation_hash);
+        return $Activation->send_activation($username, $activation_hash, $first_name, $last_name);
     }
 
     private function login($username, $password) {
@@ -316,6 +408,9 @@ class Q_Auth extends Q_Session {
             else
                 return response_message("UNAUTHORIZED", "error_username");
         }
+
+        if ($this->user_data->user_status == 'reset-pass')
+            $this->_update_user_status('active');
 
         return response_message("SUCCESS", user_login_path($this->get_role()));
     }
@@ -345,7 +440,7 @@ class Q_Auth extends Q_Session {
             return false;
         }
 
-        if (!empty($user_data->user_expire_date) && $user_data->user_expire_date != "0000-00-00 00:00:00" && strtotime($user_data->user_expire_date) < time())
+        if (!empty($user_data->user_expire_date) && $user_data->user_expire_date != "0000-00-00" && strtotime($user_data->user_expire_date) < time())
             return response_message("UNAUTHORIZED", "error_user_expired");
 
         $session_ids = $this->_create_new_session($user_data);
@@ -371,6 +466,8 @@ class Q_Auth extends Q_Session {
             "expire" => date("Y-m-d H:i:s", $this->expire_time),
             "user_id" => $this->get_user_id())
         );
+
+        $this->user_status = $user_data->user_status;
 
         return true;
     }
@@ -662,7 +759,18 @@ class Q_Auth extends Q_Session {
         if (!$user = $idb->get_row($idb->prepare("SELECT * FROM " . DB_PREFIX . "users WHERE $field = %s", $value)))
             return false;
 
-        return $user;
+        return $this->user_data = $user;
+    }
+
+    private function _update_user_status($user_status="active"){
+        global $idb;
+
+        $idb->update(DB_PREFIX . "users", 
+                                        array("user_status"=>$user_status, "user_activation_key"=>""), 
+                                        array("user_id"=>$this->get_user_id()),
+                                        array("%s", "%s"),
+                                        array("%d")
+                                    );
     }
 }
 ?>
