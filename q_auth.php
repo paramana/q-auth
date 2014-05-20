@@ -2,7 +2,7 @@
 /* !
  * Version: 1.5
  * Started: 29-04-2010
- * Updated: 18-02-2014
+ * Updated: 20-05-2014
  * Author: giannis [at] paramana dot com
  *
  * Interface for authorization.
@@ -395,10 +395,15 @@ class Q_Auth extends Q_Session {
     }
 
     private function login($username, $password) {
-        if (!empty($_POST["remember"]))
-            $this->expire_time = time() + $this->remember_time;
-        else
+        if (!empty($_POST["remember"])) {
+            if (is_numeric($_POST["remember"]))
+                $this->expire_time = time() + $_POST["remember"];
+            else
+                $this->expire_time = time() + $this->remember_time;
+        }
+        else {
             $this->expire_time = time() + $this->default_expire_time;
+        }
 
         if (!$this->authentication($username, $password)) {
             $blockLevel = $this->is_blocked();
