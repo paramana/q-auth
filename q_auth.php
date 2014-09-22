@@ -254,7 +254,7 @@ class Q_Auth extends Q_Session {
 
         $query = $idb->prepare("SELECT user_id, user_status, user_activation_key
                                 FROM " . DB_PREFIX . "users
-                                WHERE user_name = %s", $username, $reset_hash);
+                                WHERE user_name = %s AND user_activation_key = %s", $username, $reset_hash);
 
         $db_result = $idb->get_row($query);
 
@@ -391,7 +391,10 @@ class Q_Auth extends Q_Session {
 
         $Activation = Q_Activation::i();
 
-        return $Activation->send_activation($username, $activation_hash, $first_name, $last_name);
+        if (!empty($Activation))
+            return $Activation->send_activation($username, $activation_hash, $first_name, $last_name);
+
+        return true;
     }
 
     private function login($username, $password) {
