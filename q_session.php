@@ -17,6 +17,12 @@ abstract class Q_Session {
      * @var Q_Session
      */
 
+    /*
+     * The user data from users table:
+     *  
+     */
+    private $user_data;
+
     /**
      * User role
      * @var string
@@ -60,12 +66,25 @@ abstract class Q_Session {
     private $client_ip;
 
     /**
+     * @var string
+     */
+    private $cookie_path = "/";
+
+    /**
      * Default it expires at the end of the session
      * 
      * @var int
      */
     private $expire = 0;
+
+    /**
+     * @var string
+     */
     private $cookie_prefix = "";
+
+    /**
+     * @var boolean
+     */
     protected $debug = false;
 
     /**
@@ -85,6 +104,9 @@ abstract class Q_Session {
 
         if (defined("DEBUG") && DEBUG)
             $this->debug = DEBUG;
+
+        if (defined("COOKIE_PATH") && COOKIE_PATH)
+            $this->cookie_path = COOKIE_PATH;
 
         // init method via magic static keyword ($this injected)
         static::init();
@@ -168,11 +190,12 @@ abstract class Q_Session {
      * Destorys the session data
      */
     protected function _destoy_session() {
-        $this->user_id = null;
-        $this->client_ip = null;
-        $this->expire = 0;
-        $this->session_id = "";
+        $this->user_id   = NULL;
+        $this->client_ip = NULL;
+        $this->expire    = 0;
+        $this->session_id  = "";
         $this->session_id_ = "";
+        $this->user_data   = NULL;
 
         $this->_set_user_role();
         $this->_set_cookie(true);
@@ -186,12 +209,15 @@ abstract class Q_Session {
     protected function _has_session() {
         //check if a session or cookie exists,
         if (!empty($_SESSION[$this->cookie_prefix . "sid"]) && !empty($_SESSION[$this->cookie_prefix . "sid_"])) {
-            $this->session_id = $_SESSION[$this->cookie_prefix . "sid"];
+            $this->session_id  = $_SESSION[$this->cookie_prefix . "sid"];
             $this->session_id_ = $_SESSION[$this->cookie_prefix . "sid_"];
+
             return array($this->session_id, $this->session_id_);
-        } else if (!empty($_COOKIE[$this->cookie_prefix . "sid"]) && !empty($_COOKIE[$this->cookie_prefix . "sid_"])) {
-            $this->session_id = $_COOKIE[$this->cookie_prefix . "sid"];
+        } 
+        else if (!empty($_COOKIE[$this->cookie_prefix . "sid"]) && !empty($_COOKIE[$this->cookie_prefix . "sid_"])) {
+            $this->session_id  = $_COOKIE[$this->cookie_prefix . "sid"];
             $this->session_id_ = $_COOKIE[$this->cookie_prefix . "sid_"];
+
             return array($this->session_id, $this->session_id_);
         }
 
@@ -274,8 +300,8 @@ abstract class Q_Session {
      * 
      */
     private function _set_cookie($destroy = false) {
-        setcookie($this->cookie_prefix . "sid", $this->session_id, $this->expire, BASE_PATH, "", false, true);
-        setcookie($this->cookie_prefix . "sid_", $this->session_id_, $this->expire, BASE_PATH, "", false, true);
+        setcookie($this->cookie_prefix . "sid", $this->session_id, $this->expire, $this->cookie_path, "", false, true);
+        setcookie($this->cookie_prefix . "sid_", $this->session_id_, $this->expire, $this->cookie_path, "", false, true);
         if (!$destroy) {
             $_SESSION[$this->cookie_prefix . "sid"] = $this->session_id;
             $_SESSION[$this->cookie_prefix . "sid_"] = $this->session_id_;
