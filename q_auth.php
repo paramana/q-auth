@@ -2,7 +2,7 @@
 /* !
  * Version: 1.5
  * Started: 29-04-2010
- * Updated: 20-05-2014
+ * Updated: 05-01-2015
  * Author: giannis [at] paramana dot com
  *
  * Interface for authorization.
@@ -199,16 +199,16 @@ class Q_Auth extends Q_Session {
         $password  = !empty($_POST["password"]) ? sanitze_request($_POST["password"]) : NULL;
         $hash_code = !empty($_POST["hash_code"]) ? sanitze_request($_POST["hash_code"]) : NULL;
         $ishuman   = !empty($_POST["ishuman"]) ? sanitze_request($_POST["ishuman"]) : NULL;
-        $requested = !empty($_POST["requested"]) ? sanitze_request($_POST["requested"]) : NULL;
+        $requested = !empty($_POST["requested"]) ? explode("#", sanitze_request($_POST["requested"]), 2) : NULL;
 
-        if ($ishuman != "yep" || !$requested)
+        if ($ishuman != "yep" || !$requested || count($requested) != 2)
             return response_message("UNAUTHORIZED", "refresh");
         if (!$username)
             return response_message("UNAUTHORIZED", "error_username");
         if (!$password && $req_type != 'recover-pass')
             return response_message("UNAUTHORIZED", "error_password");
         
-        list($when, $hash) = explode("#", $requested, 2);
+        list($when, $hash) = $requested;
         if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
             // error condition, redisplay form; either
             // corrupted or the form was served > 30 minutes
