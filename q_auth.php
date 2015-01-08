@@ -199,21 +199,27 @@ class Q_Auth extends Q_Session {
         $password  = !empty($_POST["password"]) ? sanitze_request($_POST["password"]) : NULL;
         $hash_code = !empty($_POST["hash_code"]) ? sanitze_request($_POST["hash_code"]) : NULL;
         $ishuman   = !empty($_POST["ishuman"]) ? sanitze_request($_POST["ishuman"]) : NULL;
+        $ismobile  = !empty($_POST["ismobile"]) ? sanitze_request($_POST["ismobile"]) : NULL;
         $requested = !empty($_POST["requested"]) ? explode("#", sanitze_request($_POST["requested"]), 2) : NULL;
 
-        if ($ishuman != "yep" || !$requested || count($requested) != 2)
-            return response_message("UNAUTHORIZED", "refresh");
+        if ($ishuman != "yep")
+            return response_message("UNAUTHORIZED", "refresh2");
         if (!$username)
             return response_message("UNAUTHORIZED", "error_username");
         if (!$password && $req_type != 'recover-pass')
             return response_message("UNAUTHORIZED", "error_password");
         
-        list($when, $hash) = $requested;
-        if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
-            // error condition, redisplay form; either
-            // corrupted or the form was served > 30 minutes
-            // ago
-            return response_message("UNAUTHORIZED", "refresh");
+        if (!$ismobile) {
+            if (!$requested || count($requested) != 2)
+                return response_message("UNAUTHORIZED", "refresh");
+
+            list($when, $hash) = $requested;
+            if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
+                // error condition, redisplay form; either
+                // corrupted or the form was served > 30 minutes
+                // ago
+                return response_message("UNAUTHORIZED", "refresh");
+            }
         }
 
         $blockLevel = $that->is_blocked();
@@ -493,6 +499,9 @@ class Q_Auth extends Q_Session {
         $idb->delete(DB_PREFIX . "authentication", array("session_id" => $that->_get_session(true)), array("%s"));
 
         $that->_destoy_session();
+
+        if (!empty($request["simple"]))
+            return;
 
         if (isset($request["redirect"]))
             header("Location: " . $request["redirect"]);
