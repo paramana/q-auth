@@ -214,7 +214,7 @@ class Q_Auth extends Q_Session {
                 return response_message("UNAUTHORIZED", "refresh");
 
             list($when, $hash) = $requested;
-            if ($hash !== sha1(FORM_SALT . $when . FORM_SALT) || $when < (time() - 30 * 60)) {
+            if ($hash !== sha1(LOGGED_IN_SALT . $when . LOGGED_IN_SALT) || $when < (time() - 30 * 60)) {
                 // error condition, redisplay form; either
                 // corrupted or the form was served > 30 minutes
                 // ago
@@ -546,7 +546,7 @@ class Q_Auth extends Q_Session {
      */
     public function get_signed_sha() {
         $now = time();
-        return $now . "#" . sha1(FORM_SALT . $now . FORM_SALT);
+        return $now . "#" . sha1(LOGGED_IN_SALT . $now . LOGGED_IN_SALT);
     }
 
     /**
