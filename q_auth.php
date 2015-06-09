@@ -107,7 +107,7 @@ class Q_Auth extends Q_Session {
      */
     protected function init() {
         //get the user"s ip address
-        $this->client_ip = sprintf(ip2long(client_ip()));
+        $this->client_ip = myip2long(client_ip());
 
         $sid = $this->_has_session();
         if ($sid) {
@@ -249,7 +249,7 @@ class Q_Auth extends Q_Session {
         if ($req_type == "reset-pass")
             return $that->reset_password($username, $password, $hash_code);
 
-        return $that->login($username, $password);
+        return $that->login($username, $password, $ismobile);
     }
 
     private function reset_password($username, $password, $reset_hash){
@@ -403,7 +403,7 @@ class Q_Auth extends Q_Session {
         return true;
     }
 
-    private function login($username, $password) {
+    private function login($username, $password, $ismobile=FALSE) {
         if (!empty($_POST["remember"])) {
             if (is_numeric($_POST["remember"]))
                 $this->expire_time = time() + $_POST["remember"];
@@ -425,6 +425,9 @@ class Q_Auth extends Q_Session {
 
         if ($this->user_data->user_status == 'reset-pass')
             $this->_update_user_status('active');
+
+        if ($ismobile)
+            return response_message("SUCCESS", $this->_get_session());
 
         return response_message("SUCCESS", user_login_path($this->get_role()));
     }
@@ -467,7 +470,7 @@ class Q_Auth extends Q_Session {
 
         $this->_clean_db_sessions();
 
-        $this->client_ip = sprintf(ip2long(client_ip()));
+        $this->client_ip = myip2long(client_ip());
 
         $this->_set_last_login_date();
         $this->_remove_block();

@@ -220,8 +220,17 @@ abstract class Q_Session {
 
             return array($this->session_id, $this->session_id_);
         }
+        else {
+            $request = !empty($_REQUEST) ? sanitze_request($_REQUEST) : array();
 
-        return false;
+            if (empty($request[$this->cookie_prefix . "sid"]) || empty($request[$this->cookie_prefix . "sid_"]))
+                return false;
+
+            $this->session_id  = $request[$this->cookie_prefix . "sid"];
+            $this->session_id_ = $request[$this->cookie_prefix . "sid_"];
+
+            return array($this->session_id, $this->session_id_);
+        }
     }
 
     /**
@@ -254,6 +263,7 @@ abstract class Q_Session {
     protected function _create_new_session($data) {
         $this->_set_session_data($data);
         $this->_set_cookie();
+
         return $this->_get_session();
     }
 
@@ -289,7 +299,7 @@ abstract class Q_Session {
         $this->user_id = !empty($data->user_id) ? $data->user_id : $data->user_id;
         $this->session_id = !empty($data->session_id) ? $data->session_id : $this->_make_session_id($data->user_id, $this->expire);
         $this->session_id_ = !empty($data->session_id_) ? $data->session_id_ : $this->_make_session_id($data->user_id, $this->expire, "other");
-        $this->client_ip = !empty($data->ip) ? $data->ip : sprintf(ip2long(client_ip()));
+        $this->client_ip = !empty($data->ip) ? $data->ip : myip2long(client_ip());
         $this->expire = (!empty($data->expire) && $data->expire != "0000-00-00 00:00:00") ? $data->expire : 0;
     }
 
@@ -302,10 +312,12 @@ abstract class Q_Session {
     private function _set_cookie($destroy = false) {
         setcookie($this->cookie_prefix . "sid", $this->session_id, $this->expire, $this->cookie_path, "", false, true);
         setcookie($this->cookie_prefix . "sid_", $this->session_id_, $this->expire, $this->cookie_path, "", false, true);
+
         if (!$destroy) {
             $_SESSION[$this->cookie_prefix . "sid"] = $this->session_id;
             $_SESSION[$this->cookie_prefix . "sid_"] = $this->session_id_;
-        } else {
+        } 
+        else {
             if (isset($_SESSION[$this->cookie_prefix . "sid"])) {
                 session_destroy();
                 session_unset();
